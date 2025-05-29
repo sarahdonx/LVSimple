@@ -1,0 +1,244 @@
+// spatial and temporal discretization parameters
+L = 15.0                                  // length of computational domain (cm)
+LAdded = 5.0
+L_X = L
+L_Y = L
+L_Z = L + LAdded
+NUM_LEVELS = 1                            // number of levels in locally refined grid
+REF_RATIO  = 2                            // refinement ratio between levels
+//NFINEST = 80                              // number of Cartesian cells on finest   grid level
+//N = NFINEST/(REF_RATIO^(NUM_LEVELS - 1))  // number of Cartesian cells on coarsest grid level
+NX_FINEST = 80                                        // finest grid spacing in the X direction
+NY_FINEST = 80                                        // finest grid spacing in the Y direction
+NZ_FINEST = 100                                       // finest grid spacing in the Z direction
+NX_COARSEST = NX_FINEST/(REF_RATIO^(NUM_LEVELS - 1))  // coarsest grid spacing in the X direction
+NY_COARSEST = NY_FINEST/(REF_RATIO^(NUM_LEVELS - 1))  // coarsest grid spacing in the Y direction
+NZ_COARSEST = NZ_FINEST/(REF_RATIO^(NUM_LEVELS - 1))  // coarsest grid spacing in the Z direction
+DX_FINEST = L_X/NX_FINEST                             // finest   mesh width   in the X direction
+DY_FINEST = L_Y/NY_FINEST                             // finest   mesh width   in the Y direction
+DZ_FINEST = L_Z/NZ_FINEST                             // finest   mesh width   in the Z direction
+DX_COARSEST = L_X/NX_COARSEST                         // coarsest mesh width   in the X direction
+DY_COARSEST = L_Y/NY_COARSEST                         // coarsest mesh width   in the Y direction
+DZ_COARSEST = L_Z/NZ_COARSEST
+ELEM_ORDER = "FIRST"                      // type of structural elements to use (FIRST or SECOND)
+//DT = 1.0/(64.0*NFINEST)                   // timestep size (s)
+DT = 1.0/8192
+DT_SYSTOLE = DT/2.0                       //DT step in systole, Active contraction needs much smaller DT
+
+
+// model parameters
+RHO = 1.00                                // fluid density (gm cm^-3)
+MU  = 0.04                                // fluid viscosity (gm cm^-1 s^-1)
+NORMALIZE_STRESS = TRUE                   // whether to normalize the stress to equal zero in the reference configuration
+ENABLE_ACTIVE_TENSION = TRUE              // whether to use the active tension model
+T_SCALE = 2.2                             // active tension scale factor (dimensionless)
+P_LOAD = 8.0                              // pressure at end-diastole
+P_LOAD_ES = 109                           // pressure at peak-systole, corresponding to end-systole
+TIME_END_DIASTOLE = 0.4                  // maximum endocardial pressure load (mmHg)
+TIME_END_SIMULATION = 0.7
+T_LOAD = TIME_END_DIASTOLE                // time over which the pressure load is applied (s)
+KAPPA = 1.0e6                             // penalty parameter controling strength of tether forces at the base
+BETA_S = 1.0e6                            // penalty parameter controling strength of volumetric penalization in the elasticity model
+
+MESH_FILENAME = "./meshConversionHex/heart_real_hex.xda"      // input file that provides the structural mesh
+MESH_LENGTH_UNIT = "mm"                   // system of units used by the structural mesh file
+FIBER_DIRECTION_FILENAME = "./meshConversionHex/fiberDir.txt"      	// fiber (f0) direction field
+SHEET_DIRECTION_FILENAME = "./meshConversionHex/sheetDir.txt"       	// sheet (s0) direction field
+ENDO_POINTS_LIST         = "./meshConversionHex/endoList.point"
+
+// solver parameters
+USE_IB_DELTA_FUNCTIONS     = TRUE         // whether to use smoothed delta functions to mediate Lagrangian-Eulerian interaction
+IB_DELTA_FUNCTION          = "BSPLINE_3"       // the type of smoothed delta function to use for Lagrangian-Eulerian interaction
+SPLIT_FORCES               = FALSE        // whether to split interior and boundary forces
+USE_JUMP_CONDITIONS        = FALSE        // whether to impose pressure jumps at fluid-structure interfaces
+USE_CONSISTENT_MASS_MATRIX = TRUE         // whether to use a consistent or lumped mass matrix
+IB_POINT_DENSITY           = 2.0          // approximate density of IB quadrature points for Lagrangian-Eulerian interaction
+START_TIME                 = 0.0e0        // initial simulation time
+END_TIME                   = TIME_END_SIMULATION          // final simulation time
+GROW_DT                    = 2.0e0        // growth factor for timesteps
+NUM_CYCLES                 = 1            // number of cycles of fixed-point iteration
+CONVECTIVE_OP_TYPE         = "PPM"        // convective differencing discretization type
+CONVECTIVE_FORM            = "ADVECTIVE"  // how to compute the convective terms
+NORMALIZE_PRESSURE         = FALSE        // whether to explicitly force the pressure to have mean zero
+CFL_MAX                    = 0.2          // maximum CFL number
+VORTICITY_TAGGING          = FALSE        // whether to tag cells for refinement based on vorticity thresholds
+TAG_BUFFER                 = 1            // size of tag buffer used by grid generation algorithm
+REGRID_CFL_INTERVAL        = 0.5          // regrid whenever any material point could have moved 0.5 meshwidths since previous regrid
+OUTPUT_U                   = TRUE
+OUTPUT_P                   = TRUE
+OUTPUT_F                   = TRUE
+OUTPUT_OMEGA               = FALSE
+OUTPUT_DIV_U               = FALSE
+ENABLE_LOGGING             = TRUE
+
+CartesianGeometry {
+   domain_boxes = [ (0,0,0) , (NX_FINEST - 1,NY_FINEST - 1,NZ_FINEST - 1) ]
+   x_lo =  -0.5*L_X , -0.5*L_Y , -0.5*L_Z       // lower end of computational domain.
+   x_up =   0.5*L_X ,  0.5*L_Y ,  0.5*L_Z       // upper end of computational domain.
+   periodic_dimension = 1 , 1 , 1
+}
+
+GriddingAlgorithm {
+   max_levels = NUM_LEVELS
+
+   ratio_to_coarser {
+      level_1 = REF_RATIO,REF_RATIO,REF_RATIO
+      level_2 = REF_RATIO,REF_RATIO,REF_RATIO
+      level_3 = REF_RATIO,REF_RATIO,REF_RATIO
+      level_4 = REF_RATIO,REF_RATIO,REF_RATIO
+   }
+
+   largest_patch_size {
+      level_0 = 128,128,128               // largest  patch size on level 0
+                                          // (also used for all finer levels)
+   }
+
+   smallest_patch_size {
+      level_0 =   4,  4,  4               // smallest patch size on level 0
+                                          // (also used for all finer levels)
+   }
+
+   efficiency_tolerance = 0.85e0          // min % of tag cells in new patch level
+   combine_efficiency   = 0.85e0          // chop box if sum of volumes of smaller
+                                          // boxes < efficiency * vol of large box
+}
+
+IBExplicitHierarchyIntegrator {
+   start_time          = START_TIME
+   end_time            = END_TIME
+   grow_dt             = GROW_DT
+   num_cycles          = NUM_CYCLES
+   regrid_cfl_interval = REGRID_CFL_INTERVAL
+   dt_max              = DT
+   enable_logging      = ENABLE_LOGGING
+   error_on_dt_change  = FALSE
+}
+
+IBFEMethod {
+   use_IB_spread_operator     = USE_IB_DELTA_FUNCTIONS
+   use_IB_interp_operator     = USE_IB_DELTA_FUNCTIONS
+   IB_delta_fcn               = IB_DELTA_FUNCTION
+   split_forces               = SPLIT_FORCES
+   use_jump_conditions        = USE_JUMP_CONDITIONS
+   use_consistent_mass_matrix = USE_CONSISTENT_MASS_MATRIX
+   IB_point_density           = IB_POINT_DENSITY
+}
+
+INSStaggeredHierarchyIntegrator {
+   mu                         = MU
+   rho                        = RHO
+   start_time                 = START_TIME
+   end_time                   = END_TIME
+   grow_dt                    = GROW_DT
+   convective_op_type         = CONVECTIVE_OP_TYPE
+   convective_difference_form = CONVECTIVE_FORM
+   normalize_pressure         = NORMALIZE_PRESSURE
+   cfl                        = CFL_MAX
+   dt_max                     = DT
+   using_vorticity_tagging    = VORTICITY_TAGGING
+   vorticity_rel_thresh       = 0.25 , 0.125
+   tag_buffer                 = TAG_BUFFER
+   output_U                   = OUTPUT_U
+   output_P                   = OUTPUT_P
+   output_F                   = OUTPUT_F
+   output_Omega               = OUTPUT_OMEGA
+   output_Div_U               = OUTPUT_DIV_U
+   enable_logging             = ENABLE_LOGGING
+}
+
+Main {
+// log file parameters
+   log_file_name    = "FELV96QuarterDT20cmLZ_HV01_T2.2_Hex.log"
+   log_all_nodes    = FALSE
+
+// visualization dump parameters
+   viz_writer            = "VisIt" , "ExodusII"
+   viz_dump_interval     = 500         // zero to turn off
+   viz_dump_dirname      = "viz_FELV96QuarterDT20cmLZ_HV01_T2.2_Hex"
+   visit_number_procs_per_file = 1
+
+// restart dump parameters
+   restart_interval      = 1000                        // zero to turn off
+   restart_write_dirname = "restart_FELV_Hex"
+
+// timer dump parameters
+   timer_dump_interval   = 0                        // zero to turn off
+}
+
+LoadBalancer {
+   bin_pack_method     = "SPATIAL"
+   max_workload_factor = 0.75
+}
+
+StandardTagAndInitialize {
+   tagging_method = "GRADIENT_DETECTOR"
+}
+
+VelocityBcCoefs_0 {
+   acoef_function_0 = "0.0"
+   acoef_function_1 = "0.0"
+   acoef_function_2 = "1.0"
+   acoef_function_3 = "1.0"
+   acoef_function_4 = "1.0"
+   acoef_function_5 = "1.0"
+
+   bcoef_function_0 = "1.0"
+   bcoef_function_1 = "1.0"
+   bcoef_function_2 = "0.0"
+   bcoef_function_3 = "0.0"
+   bcoef_function_4 = "0.0"
+   bcoef_function_5 = "0.0"
+
+   gcoef_function_0 = "0.0"
+   gcoef_function_1 = "0.0"
+   gcoef_function_2 = "0.0"
+   gcoef_function_3 = "0.0"
+   gcoef_function_4 = "0.0"
+   gcoef_function_5 = "0.0"
+}
+
+VelocityBcCoefs_1 {
+   acoef_function_0 = "1.0"
+   acoef_function_1 = "1.0"
+   acoef_function_2 = "0.0"
+   acoef_function_3 = "0.0"
+   acoef_function_4 = "1.0"
+   acoef_function_5 = "1.0"
+
+   bcoef_function_0 = "0.0"
+   bcoef_function_1 = "0.0"
+   bcoef_function_2 = "1.0"
+   bcoef_function_3 = "1.0"
+   bcoef_function_4 = "0.0"
+   bcoef_function_5 = "0.0"
+
+   gcoef_function_0 = "0.0"
+   gcoef_function_1 = "0.0"
+   gcoef_function_2 = "0.0"
+   gcoef_function_3 = "0.0"
+   gcoef_function_4 = "0.0"
+   gcoef_function_5 = "0.0"
+}
+
+VelocityBcCoefs_2 {
+   acoef_function_0 = "1.0"
+   acoef_function_1 = "1.0"
+   acoef_function_2 = "1.0"
+   acoef_function_3 = "1.0"
+   acoef_function_4 = "0.0"
+   acoef_function_5 = "0.0"
+
+   bcoef_function_0 = "0.0"
+   bcoef_function_1 = "0.0"
+   bcoef_function_2 = "0.0"
+   bcoef_function_3 = "0.0"
+   bcoef_function_4 = "1.0"
+   bcoef_function_5 = "1.0"
+
+   gcoef_function_0 = "0.0"
+   gcoef_function_1 = "0.0"
+   gcoef_function_2 = "0.0"
+   gcoef_function_3 = "0.0"
+   gcoef_function_4 = "0.0"
+   gcoef_function_5 = "0.0"
+}
